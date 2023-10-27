@@ -1,15 +1,17 @@
 FROM ubuntu:22.04
 #LABEL Author="Raja Subramanian" Description="A comprehensive docker image to run Apache-2.4 PHP-8.1 applications like Wordpress, Laravel, etc"
 
-
 # Stop dpkg-reconfigure tzdata from prompting for input
+
 #ENV DEBIAN_FRONTEND=noninteractive
+
 ENV DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC 
 RUN apt-get update -y && apt-get -y install tzdata
+
 # Install apache and php8.2
 RUN apt -y update && apt -y upgrade
 
-RUN apt install -y software-properties-common
+RUN apt install -y software-properties-common unzip
 
 RUN apt-add-repository ppa:ondrej/php
 
@@ -45,13 +47,44 @@ RUN apt -y install \
 # As apache is never run as root, change dir ownership
     a2disconf other-vhosts-access-log && \
     chown -Rh www-data. /var/run/apache2 && \
+
 # Install ImageMagick CLI tools
     apt-get -y install --no-install-recommends imagemagick && \
+
 # Clean up apt setup files
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
+
 # Setup apache
     a2enmod rewrite headers expires ext_filter
+
+# Oracle instantclient
+
+# copy oracle files
+# ADD oracle/instantclient-basic-linux.x64-12.1.0.2.0.zip /tmp/
+ADD https://download.oracle.com/otn_software/linux/instantclient/211000/instantclient-basic-linux.x64-21.1.0.0.0.zip /tmp/
+
+# ADD oracle/instantclient-sdk-linux.x64-12.1.0.2.0.zip /tmp/
+ADD https://download.oracle.com/otn_software/linux/instantclient/211000/instantclient-sdk-linux.x64-21.1.0.0.0.zip /tmp/
+
+# ADD oracle/instantclient-sqlplus-linux.x64-12.1.0.2.0.zip /tmp/
+ADD https://download.oracle.com/otn_software/linux/instantclient/211000/instantclient-sqlplus-linux.x64-21.1.0.0.0.zip /tmp/
+
+# unzip them
+RUN unzip /tmp/instantclient-basic-linux.x64-*.zip -d /usr/local/ \
+    && unzip /tmp/instantclient-sdk-linux.x64-*.zip -d /usr/local/ \
+    && unzip /tmp/instantclient-sqlplus-linux.x64-*.zip -d /usr/local/
+
+# install oci8
+RUN ln -s /usr/local/instantclient_*_1 /usr/local/instantclient \
+    && ln -s /usr/local/instantclient/sqlplus /usr/bin/sqlplus 
+
+RUN docker-php-ext-configure oci8 --with-oci8=instantclient,/usr/local/instantclient \
+    && docker-php-ext-install oci8 \
+    && echo /usr/local/instantclient/ > /etc/ld.so.conf.d/oracle-insantclient.conf \
+    && ldconfig
+
+
 
 # Override default apache and php config
 COPY src/000-default.conf /etc/apache2/sites-available
